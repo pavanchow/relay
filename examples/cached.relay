@@ -1,0 +1,16 @@
+# The build job declares its inputs. On a second run with unchanged sources,
+# relay restores the stored outputs and marks build CACHED instead of running it.
+job build {
+  step echo compiling
+  step sh -c 'echo built > artifact.txt'
+  produces artifact.txt
+  cache {
+    key v1
+    paths src
+  }
+}
+
+job test {
+  needs build
+  step echo testing against the built artifact
+}

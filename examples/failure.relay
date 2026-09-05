@@ -1,0 +1,26 @@
+# unit fails, so package and deploy (its dependents) are SKIPPED. The docs
+# branch is independent and still runs to completion.
+job setup {
+  step echo setting up
+}
+
+job unit {
+  needs setup
+  step echo running unit tests
+  step sh -c 'exit 1'
+}
+
+job package {
+  needs unit
+  step echo packaging
+}
+
+job deploy {
+  needs package
+  step echo deploying
+}
+
+job docs {
+  needs setup
+  step echo building docs
+}

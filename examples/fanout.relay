@@ -1,0 +1,40 @@
+# Wide parallel fan-out: one setup, six independent shards, one join. With
+# --jobs 3 the shards run three at a time.
+job setup {
+  step echo preparing matrix
+}
+
+job shard1 {
+  needs setup
+  step echo shard 1
+}
+
+job shard2 {
+  needs setup
+  step echo shard 2
+}
+
+job shard3 {
+  needs setup
+  step echo shard 3
+}
+
+job shard4 {
+  needs setup
+  step echo shard 4
+}
+
+job shard5 {
+  needs setup
+  step echo shard 5
+}
+
+job shard6 {
+  needs setup
+  step echo shard 6
+}
+
+job merge {
+  needs shard1, shard2, shard3, shard4, shard5, shard6
+  step echo merging results
+}

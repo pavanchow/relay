@@ -1,0 +1,19 @@
+# A classic diamond: fetch fans out to build+lint, then test joins them.
+job fetch {
+  step echo fetching sources
+}
+
+job build {
+  needs fetch
+  step echo compiling
+}
+
+job lint {
+  needs fetch
+  step echo linting
+}
+
+job test {
+  needs build, lint
+  step echo running tests
+}
