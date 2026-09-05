@@ -1,0 +1,16 @@
+[package]
+name = "relay"
+version = "0.1.0"
+edition = "2021"
+authors = ["Pavan Nallamothu <pavankumarpre@gmail.com>"]
+description = "A readable, from-scratch CI/CD engine with a pure, deterministic DAG scheduler"
+license = "MIT"
+repository = "https://github.com/pavanchow/relay"
+
+[[bin]]
+name = "relay"
+path = "src/main.rs"
+
+[lib]
+name = "relay"
+path = "src/lib.rs"
