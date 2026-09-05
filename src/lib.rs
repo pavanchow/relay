@@ -14,6 +14,7 @@ pub mod hash;
 pub mod mock;
 pub mod pipeline;
 pub mod report;
+pub mod safepath;
 pub mod schedule;
 
 pub use error::Error;

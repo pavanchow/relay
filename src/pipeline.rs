@@ -17,8 +17,10 @@
 //! ```
 
 use std::fmt;
+use std::time::Duration;
 
 use crate::error::Error;
+use crate::safepath::is_confined;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Cache {
@@ -39,6 +41,9 @@ pub struct Job {
     pub produces: Vec<String>,
     pub cache: Option<Cache>,
     pub continue_on_error: bool,
+    /// Wall-clock cap for the whole job, across all its steps. Complements the
+    /// executor's per-step timeout. `None` means no job-level limit.
+    pub timeout: Option<Duration>,
 }
 
 impl Job {
@@ -51,6 +56,7 @@ impl Job {
             produces: Vec::new(),
             cache: None,
             continue_on_error: false,
+            timeout: None,
         }
     }
 }
@@ -103,6 +109,12 @@ fn parse(input: &str) -> Result<Pipeline, Error> {
         if name.is_empty() {
             return Err(Error::parse(*ln, "missing job name"));
         }
+        if name.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(Error::parse(
+                *ln,
+                format!("invalid job name '{name}': names may not contain whitespace or control characters"),
+            ));
+        }
         if jobs.iter().any(|j| j.name == name) {
             return Err(Error::DuplicateJob(name.to_string()));
         }
@@ -134,7 +146,22 @@ fn parse_job(name: &str, lines: &[(usize, String)], mut i: usize) -> Result<(Job
         } else if let Some(r) = line.strip_prefix("step ") {
             job.steps.push(r.trim().to_string());
         } else if let Some(r) = line.strip_prefix("produces ") {
-            job.produces = split_list(r);
+            let paths = split_list(r);
+            for p in &paths {
+                if !is_confined(p) {
+                    return Err(Error::parse(
+                        *ln,
+                        format!("produces path '{p}' escapes the workspace (absolute or '..' not allowed)"),
+                    ));
+                }
+            }
+            job.produces = paths;
+        } else if let Some(r) = line.strip_prefix("timeout ") {
+            let secs: u64 = r
+                .trim()
+                .parse()
+                .map_err(|_| Error::parse(*ln, format!("timeout requires whole seconds, found: {}", r.trim())))?;
+            job.timeout = Some(Duration::from_secs(secs));
         } else if line == "continue-on-error" {
             job.continue_on_error = true;
         } else if line == "cache {" || line == "cache{" {
@@ -167,7 +194,16 @@ fn parse_cache(lines: &[(usize, String)], mut i: usize) -> Result<(Cache, usize)
         if let Some(r) = line.strip_prefix("key ") {
             cache.key = Some(r.trim().to_string());
         } else if let Some(r) = line.strip_prefix("paths ") {
-            cache.paths = split_list(r);
+            let paths = split_list(r);
+            for p in &paths {
+                if !is_confined(p) {
+                    return Err(Error::parse(
+                        *ln,
+                        format!("cache path '{p}' escapes the workspace (absolute or '..' not allowed)"),
+                    ));
+                }
+            }
+            cache.paths = paths;
         } else {
             return Err(Error::parse(*ln, format!("unknown cache directive: {line}")));
         }
@@ -201,6 +237,9 @@ fn write_job(f: &mut fmt::Formatter<'_>, job: &Job) -> fmt::Result {
     }
     if !job.produces.is_empty() {
         writeln!(f, "  produces {}", job.produces.join(", "))?;
+    }
+    if let Some(timeout) = job.timeout {
+        writeln!(f, "  timeout {}", timeout.as_secs())?;
     }
     if let Some(cache) = &job.cache {
         writeln!(f, "  cache {{")?;
