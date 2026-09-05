@@ -345,7 +345,11 @@ function simulate(def, concurrency, failFast) {
         const ready = deps[i].every(d => state[d] === DONE);
         if (!ready) continue;
 
-        if (def[i].cached) {                 // cache hit: instant, no slot
+        // cache key is upstream-aware: a stored entry only matches if no
+        // dependency re-ran. If any upstream executed, its output changed the
+        // downstream key, so the hit is busted (mirrors compute_key_with_deps).
+        const upstreamStable = deps[i].every(d => status[d] === "cached");
+        if (def[i].cached && upstreamStable) {  // cache hit: instant, no slot
           status[i] = "cached"; state[i] = DONE;
           startT[i] = endT[i] = clock; startOrder[i] = counter++;
           started = true; break;

@@ -38,11 +38,28 @@ What the scheduler guarantees:
   they never run. Independent branches keep going. A `continue-on-error` job that
   fails does not skip its dependents.
 - Content-hash caching. A job's cache key is a hand-rolled FNV-1a digest of its
-  config plus the content of its declared input paths. A stored match marks the
-  job CACHED and skips execution, restoring its recorded outputs. Change an input
-  and the key busts.
+  config plus the content of its declared input paths. The key is also
+  upstream-aware. It folds in the resolved key of every dependency and the
+  artifacts that dependency handed down, so a change in a non-cached upstream job
+  busts the downstream key too. A stored match marks the job CACHED and skips
+  execution, restoring its recorded outputs. Change an input and the key busts.
 - Determinism. Same pipeline, same result and same order, every run. Ties break
   by config order.
+
+## Execution and isolation
+
+The `ShellExecutor` gives every job its own working directory under
+`base_dir/.relay-work/<job>`. Before a job runs, the artifacts produced by its
+dependencies are materialized into that directory, so cross-job files travel
+through the documented `produces` to `inputs` mechanism rather than a shared
+current directory. Jobs cannot clobber each other, and a dependent reads its
+inputs even though it runs in a different directory from the producer.
+
+Timeouts kill the whole process group, not just the direct `sh` child. A step
+that backgrounds a long-lived child (for example `sleep 20 & echo x`) can no
+longer hold a pipe open and outlive the deadline. Both the per-step timeout and
+the per-job `timeout` reap the entire group with SIGKILL, and the reader threads
+are bounded so they never block past the deadline.
 
 ## The pipeline format
 
@@ -54,6 +71,7 @@ job build {
   env RUST_LOG = debug
   step cargo build
   produces target/app
+  timeout 300
   cache {
     key v1
     paths src, Cargo.toml
@@ -64,10 +82,17 @@ job build {
 
 - `needs` lists dependency job names.
 - `env` sets one key/value pair per line.
-- `step` is a shell command; steps run in order and stop at the first failure.
+- `step` is a shell command. Steps run in order and stop at the first failure.
 - `produces` lists output files collected as artifacts for dependent jobs.
+- `timeout` is a whole-job wall-clock cap in seconds. It is separate from the
+  executor's per-step timeout and complements it. Whichever fires first stops the
+  job.
 - `cache { key, paths }` declares the inputs whose content decides the key.
 - `continue-on-error` lets a failure not skip dependents.
+
+Declared paths (`produces` and `cache.paths`) must stay inside the workspace. An
+absolute path or any `..` component is rejected at parse time, so a pipeline
+cannot read or clobber files outside its base directory.
 
 ## CLI
 
@@ -125,9 +150,11 @@ cargo clippy --all-targets -- -D warnings
 The suite covers the scheduler over the mock (dependency order, concurrency
 limit, skip propagation, continue-on-error, fail-fast, determinism, waves),
 graph validation (cycles, missing deps, duplicates), caching (hit, bust,
-determinism), config round-trip, and one real integration test that runs actual
-shell commands in a temp dir, passes an artifact between jobs, and confirms a
-failing job skips its dependent.
+determinism, upstream-aware busting), config round-trip, path confinement, job
+name validation, per-step and per-job timeouts that reap backgrounded children,
+and real integration tests that run actual shell commands in a temp dir and
+deliver an artifact from a producer into a dependent's separate working
+directory.
 
 ## Non-goals
 

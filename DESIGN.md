@@ -26,8 +26,11 @@ The scheduler calls `run` when a job starts and reads back a `JobOutcome`: did i
 succeed, what did it produce, how long did it take. It never touches a process, a
 thread, or a real clock. Two implementations sit behind the trait:
 
-- `ShellExecutor` runs each step as `sh -c` in the job's directory, stops at the
-  first failing step, and collects declared `produces` files as artifacts.
+- `ShellExecutor` runs each step as `sh -c` in the job's own working directory,
+  stops at the first failing step, and collects declared `produces` files as
+  artifacts. It materializes the `inputs` handed to it before running, so a
+  dependent receives its upstream artifacts even though it runs in a separate
+  directory.
 - `MockExecutor` returns scripted outcomes and records the order jobs started and
   the peak number live at once.
 
@@ -77,13 +80,20 @@ already in flight are allowed to finish.
 Each job's cache key is a hand-rolled FNV-1a digest over:
 
 - a format version tag,
-- the job's name, steps, env pairs, needs, and continue-on-error flag,
+- the job's name, steps, env pairs, needs, continue-on-error flag, and job-level
+  timeout,
+- the resolved cache key of every dependency, and the content of the artifacts
+  those dependencies handed down as inputs,
 - the optional `cache.key` label,
 - for each declared `cache.paths` entry (sorted), the path and a recursive
   content hash of the file or directory it points at.
 
-All writes into the hasher are length-delimited so `"ab" + "c"` cannot collide
-with `"a" + "bc"`. If the store holds an entry for the key, the job is CACHED: it
+Folding in the dependency keys and inputs is what makes the key upstream-aware. A
+non-cached upstream job whose output changes changes its own key, which changes
+the inputs it produces, which changes this job's key, so a stale downstream entry
+is never reused. All writes into the hasher are length-delimited so `"ab" + "c"`
+cannot collide with `"a" + "bc"`. If the store holds an entry for the key, the
+job is CACHED: it
 is not executed, and its recorded artifacts and logs are restored so dependents
 still see its outputs. On a successful real run of a job that has a cache block,
 the entry is stored under the key. Change any declared input byte and the key
@@ -98,9 +108,35 @@ length-prefixed binary format, so cache survives across invocations.
 
 `Artifacts` is a `BTreeMap<String, Vec<u8>>` so iteration is ordered and hashing
 is stable. When a job starts, the scheduler merges the outputs of its direct
-dependencies into the `inputs` it passes to `run`. The `ShellExecutor` reads
-declared `produces` files off disk after a successful run; the mock supplies
-artifacts from its script. This is how an early job's file reaches a later job.
+dependencies into the `inputs` it passes to `run`. The `ShellExecutor` writes
+those inputs into the job's own working directory before the steps run, then
+reads declared `produces` files back out of that directory after a successful
+run. The mock supplies artifacts from its script. This is how an early job's file
+reaches a later job that runs in a different directory, and it is what isolates
+one job's files from another.
+
+## Isolation, timeouts, and path confinement
+
+Each job runs in `base_dir/.relay-work/<job>`, created fresh, so jobs do not share
+a current directory and cannot clobber each other's files. This makes the
+`produces` to `inputs` plumbing the real carrier of cross-job files rather than an
+accident of a shared directory.
+
+Timeouts must survive a step that backgrounds a child. The executor launches each
+step in its own process group. When a per-step or per-job timeout fires, it sends
+SIGKILL to the whole group, so an orphaned grandchild dies too and stops holding
+the stdout or stderr pipe open. The pipe readers run on threads whose results
+come back over channels, and after a kill they are collected with a short grace,
+so a reader can never block the run past the deadline. The per-job `timeout` is a
+wall-clock cap across all steps and is enforced independently of the per-step
+limit. Whichever is tighter for the next step is the one that applies.
+
+Declared paths are confined. A `produces` or `cache.paths` entry that is absolute
+or contains a `..` component is rejected at parse time, and the executor and cache
+key both refuse such a path defensively if one reaches them through the API. This
+keeps a pipeline from reading or writing outside its base directory. Job names are
+validated at parse time as well, so `job a b c {` is a clear error rather than a
+job silently named `a b c`.
 
 ## Why a text config with a printer
 
