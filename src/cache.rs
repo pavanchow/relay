@@ -7,12 +7,24 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
+use crate::executor::Artifacts;
 use crate::hash::Hasher;
 use crate::pipeline::Job;
+use crate::safepath::is_confined;
 
-/// Deterministic key for a job: identical config + identical input bytes yields
-/// an identical key on any machine; changing either busts it.
+/// Deterministic key for a job in isolation, folding no upstream contribution.
+/// Kept for callers that key a single job; the scheduler uses
+/// [`compute_key_with_deps`] so an upstream change busts the downstream key.
 pub fn compute_key(job: &Job, base: &Path) -> u64 {
+    compute_key_with_deps(job, base, &Artifacts::new(), &[])
+}
+
+/// Deterministic key for a job, made upstream-aware. It folds the job's own
+/// config and declared cache-path content, plus every dependency's resolved key
+/// and the merged `inputs` artifacts it received. So when a non-cached upstream
+/// job's output changes, this dependent's key changes and its stale cache entry
+/// is not reused.
+pub fn compute_key_with_deps(job: &Job, base: &Path, inputs: &Artifacts, dep_keys: &[u64]) -> u64 {
     let mut h = Hasher::new();
     h.write_str("relay-cache-v1");
     h.write_str(&job.name);
@@ -30,6 +42,23 @@ pub fn compute_key(job: &Job, base: &Path) -> u64 {
         h.write_str(need);
     }
     h.write_u64(job.continue_on_error as u64);
+    if let Some(timeout) = job.timeout {
+        h.write_str("timeout");
+        h.write_u64(timeout.as_secs());
+    }
+
+    // Upstream awareness: each dependency's resolved key, then the content of the
+    // artifacts this job received from its dependencies.
+    for &dk in dep_keys {
+        h.write_str("dep-key");
+        h.write_u64(dk);
+    }
+    for (name, bytes) in inputs.iter() {
+        h.write_str("input");
+        h.write_str(name);
+        h.write_u64(bytes.len() as u64);
+        h.write(bytes);
+    }
 
     if let Some(cache) = &job.cache {
         if let Some(key) = &cache.key {
@@ -40,8 +69,14 @@ pub fn compute_key(job: &Job, base: &Path) -> u64 {
         paths.sort();
         for p in &paths {
             h.write_str("path");
-            h.write_str(p);
-            hash_path(&mut h, &base.join(p));
+            // A path that escapes base_dir must never read or hash outside it.
+            // Valid pipelines reject these at parse time; this guards direct API use.
+            if is_confined(p) {
+                h.write_str(p);
+                hash_path(&mut h, &base.join(p));
+            } else {
+                h.write_str("unsafe-path");
+            }
         }
     }
     h.finish()

@@ -72,6 +72,9 @@ pub fn run_with_cache(
     let mut start_nanos = vec![0u64; n];
     let mut duration = vec![Duration::ZERO; n];
     let mut logs = vec![String::new(); n];
+    // Cache key per job, computed once when the job becomes ready (upstream-aware)
+    // and reused when it retires, so get and put always agree.
+    let mut keys = vec![0u64; n];
     // For a running job: Some(success) it will report when it retires.
     let mut pending_success: Vec<Option<bool>> = vec![None; n];
 
@@ -125,7 +128,16 @@ pub fn run_with_cache(
                     continue;
                 }
 
-                let key = cache::compute_key(&jobs[i], &limits.base_dir);
+                // Merge dependency outputs into this job's inputs, then key the job
+                // against its own config plus that upstream contribution.
+                let mut inputs = Artifacts::new();
+                for &d in &dag.deps[i] {
+                    inputs.merge(&outputs[d]);
+                }
+                let dep_keys: Vec<u64> = dag.deps[i].iter().map(|&d| keys[d]).collect();
+                let key = cache::compute_key_with_deps(&jobs[i], &limits.base_dir, &inputs, &dep_keys);
+                keys[i] = key;
+
                 if let Some(entry) = cache.get(key) {
                     status[i] = Some(Status::Cached);
                     state[i] = State::Done;
@@ -146,10 +158,6 @@ pub fn run_with_cache(
                     continue;
                 }
 
-                let mut inputs = Artifacts::new();
-                for &d in &dag.deps[i] {
-                    inputs.merge(&outputs[d]);
-                }
                 let outcome = exec.run(&jobs[i], &inputs);
                 state[i] = State::Running;
                 start_order[i] = counter;
@@ -193,7 +201,7 @@ pub fn run_with_cache(
             if success {
                 status[i] = Some(Status::Success);
                 if jobs[i].cache.is_some() {
-                    let key = cache::compute_key(&jobs[i], &limits.base_dir);
+                    let key = keys[i];
                     let artifacts = outputs[i]
                         .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
