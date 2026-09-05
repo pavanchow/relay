@@ -2,11 +2,602 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>relay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay - a readable CI/CD engine</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-2: #fbfbfd;
+    --fg: #1d1d1f;
+    --muted: #6e6e73;
+    --line: #d2d2d7;
+    --accent: #0071e3;
+    --accent-weak: #e8f1fd;
+    --pending: #c7c7cc;
+    --running: #0071e3;
+    --success: #34c759;
+    --failed: #ff3b30;
+    --skipped: #8e8e93;
+    --cached: #af52de;
+    --shadow: 0 2px 14px rgba(0,0,0,0.06);
+    --radius: 16px;
+  }
+  /* base body first, dark override after so text is never light-on-white */
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000;
+    --panel: #1c1c1e;
+    --panel-2: #161618;
+    --fg: #f5f5f7;
+    --muted: #a1a1a6;
+    --line: #3a3a3c;
+    --accent: #2997ff;
+    --accent-weak: #10233a;
+    --pending: #48484a;
+    --shadow: 0 2px 18px rgba(0,0,0,0.5);
+  }
+  :root[data-theme="dark"] body {
+    background: var(--bg);
+    color: var(--fg);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000;
+      --panel: #1c1c1e;
+      --panel-2: #161618;
+      --fg: #f5f5f7;
+      --muted: #a1a1a6;
+      --line: #3a3a3c;
+      --accent: #2997ff;
+      --accent-weak: #10233a;
+      --pending: #48484a;
+      --shadow: 0 2px 18px rgba(0,0,0,0.5);
+    }
+    :root:not([data-theme="light"]) body {
+      background: var(--bg);
+      color: var(--fg);
+    }
+  }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px 80px; }
+  header.hero { text-align: center; padding: 72px 22px 40px; }
+  .hero h1 { font-size: 56px; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 700; }
+  .hero p.lede { font-size: 22px; color: var(--muted); max-width: 640px; margin: 0 auto; }
+  .hero .links { margin-top: 22px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  a.btn {
+    text-decoration: none; color: var(--accent); font-size: 17px;
+    padding: 8px 16px; border-radius: 980px; border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  a.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 10;
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+    border-radius: 980px; padding: 7px 14px; font-size: 14px; cursor: pointer;
+  }
+
+  section { margin-top: 30px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px;
+  }
+  h2 { font-size: 30px; letter-spacing: -0.01em; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: 16px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  button.chip {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+    border-radius: 980px; padding: 8px 15px; font-size: 14px; cursor: pointer;
+  }
+  button.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .spacer { flex: 1 1 auto; }
+  button.run {
+    border: none; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600;
+    border-radius: 980px; padding: 9px 22px; cursor: pointer;
+  }
+  button.run:disabled { opacity: 0.5; cursor: default; }
+  button.ghost {
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+    border-radius: 980px; padding: 9px 16px; font-size: 15px; cursor: pointer;
+  }
+  .slider { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+  .slider input { accent-color: var(--accent); }
+  label.ff { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+  .stage {
+    position: relative; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden;
+  }
+  svg { display: block; width: 100%; height: auto; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .dot.pending { background: var(--pending); }
+  .dot.running { background: var(--running); }
+  .dot.success { background: var(--success); }
+  .dot.failed { background: var(--failed); }
+  .dot.skipped { background: var(--skipped); }
+  .dot.cached { background: var(--cached); }
+
+  .readout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 720px) { .readout { grid-template-columns: 1fr; } }
+  .readout .box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .readout h4 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  #log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; height: 150px; overflow-y: auto; }
+  #log div { padding: 1px 0; }
+  .tag { font-weight: 600; }
+  .tag.success { color: var(--success); }
+  .tag.failed { color: var(--failed); }
+  .tag.skipped { color: var(--skipped); }
+  .tag.cached { color: var(--cached); }
+  .tag.running { color: var(--running); }
+  #summary { font-size: 15px; }
+  #summary .num { font-weight: 700; }
+
+  .desc { font-size: 15px; color: var(--muted); margin-top: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--accent-weak); padding: 1px 5px; border-radius: 5px; }
+  footer { text-align: center; color: var(--muted); font-size: 14px; margin-top: 50px; }
+
+  /* SVG node styling driven by data-state */
+  .node rect { transition: fill 0.25s ease, stroke 0.25s ease; }
+  .node text { font-size: 13px; font-weight: 600; fill: var(--fg); }
+  .node .sub { font-size: 10px; font-weight: 500; fill: var(--muted); }
+  .node[data-state="pending"] rect { fill: var(--panel); stroke: var(--pending); stroke-width: 2; }
+  .node[data-state="running"] rect { fill: var(--accent-weak); stroke: var(--running); stroke-width: 3; }
+  .node[data-state="success"] rect { fill: var(--panel); stroke: var(--success); stroke-width: 3; }
+  .node[data-state="failed"] rect { fill: var(--panel); stroke: var(--failed); stroke-width: 3; }
+  .node[data-state="skipped"] rect { fill: var(--panel-2); stroke: var(--skipped); stroke-width: 2; stroke-dasharray: 4 4; }
+  .node[data-state="cached"] rect { fill: var(--panel); stroke: var(--cached); stroke-width: 3; }
+  .node[data-state="skipped"] text { fill: var(--muted); }
+  .edge { stroke: var(--line); stroke-width: 2; fill: none; }
+  .edge.hot { stroke: var(--running); }
+  .pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+</style>
 </head>
 <body>
-<h1>relay</h1>
-<p>Site coming soon.</p>
-<p><a href="https://github.com/pavanchow/relay">View repository</a></p>
+<button class="theme-toggle" id="themeToggle">Theme</button>
+
+<header class="hero">
+  <h1>Relay</h1>
+  <p class="lede">A readable CI/CD engine whose scheduler is a pure, deterministic DAG executor you can unit-test without running anything.</p>
+  <div class="links">
+    <a class="btn primary" href="#playground">Try the visualizer</a>
+    <a class="btn" href="https://github.com/pavanchow/relay">View on GitHub</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section id="playground">
+    <div class="card">
+      <h2>Live pipeline visualizer</h2>
+      <p class="sub">This is the Rust scheduler ported to JavaScript with a simulated executor. Pick a preset, set the concurrency limit, and press Run. Watch jobs go pending, running, then success, failed, skipped, or cached, exactly as the engine resolves them.</p>
+
+      <div class="controls">
+        <div class="presets" id="presets">
+          <button class="chip active" data-preset="diamond">Diamond DAG</button>
+          <button class="chip" data-preset="failure">Failure skips a subtree</button>
+          <button class="chip" data-preset="fanout">Wide fan-out</button>
+          <button class="chip" data-preset="cache">Cache hit</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="slider">
+          <span>jobs</span>
+          <input type="range" id="jobs" min="1" max="6" value="2">
+          <span id="jobsVal">2</span>
+        </div>
+        <label class="ff"><input type="checkbox" id="failFast"> fail-fast</label>
+        <button class="ghost" id="resetBtn">Reset</button>
+        <button class="run" id="runBtn">Run</button>
+      </div>
+
+      <div class="stage"><svg id="canvas" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"></svg></div>
+
+      <div class="legend">
+        <span><i class="dot pending"></i> pending</span>
+        <span><i class="dot running"></i> running</span>
+        <span><i class="dot success"></i> success</span>
+        <span><i class="dot failed"></i> failed</span>
+        <span><i class="dot skipped"></i> skipped</span>
+        <span><i class="dot cached"></i> cached</span>
+      </div>
+
+      <p class="desc" id="presetDesc"></p>
+
+      <div class="readout">
+        <div class="box">
+          <h4>Event log</h4>
+          <div id="log"></div>
+        </div>
+        <div class="box">
+          <h4>Summary</h4>
+          <div id="summary">Press Run.</div>
+          <div style="margin-top:10px;color:var(--muted);font-size:13px;">Peak concurrency observed: <span class="num" id="peak">0</span> (limit <span id="limit">2</span>)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div class="card">
+        <h2>The point</h2>
+        <p class="desc">The core is one function: <code>run(pipeline, executor, limits) -&gt; Report</code>. The scheduler never spawns a process or a thread. It drives an <code>Executor</code> trait in virtual time. Swap in a mock executor and every rule is testable with no real work; swap in the shell executor and the same scheduler runs real commands.</p>
+      </div>
+      <div class="card">
+        <h2>What it guarantees</h2>
+        <p class="desc">Dependency order, real parallelism up to N, failure propagation that skips a failed job's transitive dependents, content-hash caching that skips unchanged work, and full determinism with config-order tie-breaks. It pairs with Metronome, a from-scratch scheduler.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Relay by Pavan Nallamothu. Zero dependencies, pure Rust std. MIT licensed.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+// ---- Presets -------------------------------------------------------------
+// Each job: name, needs[], dur (sim ms), fail?, cached? (a stored entry exists).
+const PRESETS = {
+  diamond: {
+    jobs: 2,
+    desc: "fetch fans out to build and lint, which join at test. With jobs = 2, build and lint run together in wave 1.",
+    def: [
+      { name: "fetch", needs: [], dur: 600 },
+      { name: "build", needs: ["fetch"], dur: 950 },
+      { name: "lint",  needs: ["fetch"], dur: 550 },
+      { name: "test",  needs: ["build", "lint"], dur: 700 },
+    ],
+  },
+  failure: {
+    jobs: 3,
+    desc: "unit fails, so package and deploy (its transitive dependents) are skipped and never run. The docs branch is independent and finishes.",
+    def: [
+      { name: "setup",   needs: [], dur: 450 },
+      { name: "unit",    needs: ["setup"], dur: 650, fail: true },
+      { name: "package", needs: ["unit"], dur: 600 },
+      { name: "deploy",  needs: ["package"], dur: 500 },
+      { name: "docs",    needs: ["setup"], dur: 800 },
+    ],
+  },
+  fanout: {
+    jobs: 3,
+    desc: "One setup, six independent shards, one merge. With jobs = 3 the shards run three at a time, so peak concurrency stays at the limit.",
+    def: [
+      { name: "setup",  needs: [], dur: 400 },
+      { name: "shard1", needs: ["setup"], dur: 700 },
+      { name: "shard2", needs: ["setup"], dur: 550 },
+      { name: "shard3", needs: ["setup"], dur: 800 },
+      { name: "shard4", needs: ["setup"], dur: 600 },
+      { name: "shard5", needs: ["setup"], dur: 750 },
+      { name: "shard6", needs: ["setup"], dur: 500 },
+      { name: "merge",  needs: ["shard1","shard2","shard3","shard4","shard5","shard6"], dur: 500 },
+    ],
+  },
+  cache: {
+    jobs: 2,
+    desc: "build has an unchanged cache key, so a stored entry matches: it resolves as cached instantly without executing, and test runs against the restored output.",
+    def: [
+      { name: "build", needs: [], dur: 950, cached: true },
+      { name: "test",  needs: ["build"], dur: 650 },
+    ],
+  },
+};
+
+// ---- Scheduler (faithful port of src/schedule.rs) ------------------------
+// Returns per-job { startT, endT, status, startOrder } and peak concurrency.
+function simulate(def, concurrency, failFast) {
+  const n = def.length;
+  const index = {};
+  def.forEach((j, i) => { index[j.name] = i; });
+  const deps = def.map(j => j.needs.map(d => index[d]));
+
+  const PENDING = 0, RUNNING = 1, DONE = 2;
+  const state = new Array(n).fill(PENDING);
+  const status = new Array(n).fill(null);
+  const startT = new Array(n).fill(0);
+  const endT = new Array(n).fill(0);
+  const startOrder = new Array(n).fill(-1);
+  const pendingSuccess = new Array(n).fill(null);
+
+  let inFlight = [];          // { finish, i }
+  let clock = 0, counter = 0, aborting = false, live = 0, peak = 0;
+
+  // continue-on-error is not exercised by these presets; a failed dep blocks.
+  const blocks = (i) => status[i] === "skipped" || status[i] === "failed";
+
+  while (true) {
+    // 1. propagate skips
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i < n; i++) {
+        if (state[i] !== PENDING) continue;
+        if (aborting) { status[i] = "skipped"; state[i] = DONE; startT[i] = endT[i] = clock; changed = true; continue; }
+        const blocked = deps[i].some(d => state[d] === DONE && blocks(d));
+        if (blocked) { status[i] = "skipped"; state[i] = DONE; startT[i] = endT[i] = clock; changed = true; }
+      }
+    }
+
+    // 2. start jobs
+    let started = true;
+    while (started && !aborting) {
+      started = false;
+      for (let i = 0; i < n; i++) {
+        if (state[i] !== PENDING) continue;
+        const ready = deps[i].every(d => state[d] === DONE);
+        if (!ready) continue;
+
+        if (def[i].cached) {                 // cache hit: instant, no slot
+          status[i] = "cached"; state[i] = DONE;
+          startT[i] = endT[i] = clock; startOrder[i] = counter++;
+          started = true; break;
+        }
+        if (live >= concurrency) continue;   // no slot
+        state[i] = RUNNING; startOrder[i] = counter++;
+        startT[i] = clock; endT[i] = clock + def[i].dur;
+        pendingSuccess[i] = !def[i].fail;
+        inFlight.push({ finish: endT[i], i });
+        live++; if (live > peak) peak = live;
+        started = true; break;
+      }
+    }
+
+    if (inFlight.length === 0) break;
+
+    // 3. advance clock, retire earliest finishers (config order)
+    const minFinish = Math.min(...inFlight.map(f => f.finish));
+    clock = minFinish;
+    const finished = inFlight.filter(f => f.finish === minFinish).map(f => f.i).sort((a, b) => a - b);
+    inFlight = inFlight.filter(f => f.finish !== minFinish);
+    for (const i of finished) {
+      live--;
+      state[i] = DONE;
+      if (pendingSuccess[i]) status[i] = "success";
+      else { status[i] = "failed"; if (failFast) aborting = true; }
+    }
+  }
+
+  for (let i = 0; i < n; i++) if (status[i] === null) status[i] = "skipped";
+  const maxT = Math.max(1, ...endT);
+  return { startT, endT, status, startOrder, peak, maxT, deps };
+}
+
+// ---- Layout & rendering --------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+const canvas = document.getElementById("canvas");
+const NODE_W = 128, NODE_H = 52;
+
+let current = "diamond";
+let layout = null;      // { positions:[{x,y}], levels:[], schedule }
+let anim = null;
+
+function computeLevels(def, deps) {
+  const n = def.length;
+  const level = new Array(n).fill(0);
+  // longest path from roots via repeated relaxation (DAG, small)
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < n; i++) {
+      for (const d of deps[i]) {
+        if (level[i] < level[d] + 1) { level[i] = level[d] + 1; changed = true; }
+      }
+    }
+  }
+  return level;
+}
+
+function build(preset) {
+  const def = PRESETS[preset].def;
+  const index = {}; def.forEach((j, i) => index[j.name] = i);
+  const deps = def.map(j => j.needs.map(d => index[d]));
+  const levels = computeLevels(def, deps);
+  const maxLevel = Math.max(...levels);
+
+  // group by level for vertical placement
+  const byLevel = [];
+  for (let l = 0; l <= maxLevel; l++) byLevel.push([]);
+  def.forEach((j, i) => byLevel[levels[i]].push(i));
+
+  const colGap = maxLevel > 0 ? (1000 - 120) / maxLevel : 0;
+  const positions = new Array(def.length);
+  const rowCounts = byLevel.map(a => a.length);
+  const maxRows = Math.max(...rowCounts);
+  const height = Math.max(240, maxRows * 74 + 60);
+  canvas.setAttribute("viewBox", `0 0 1000 ${height}`);
+
+  byLevel.forEach((jobs, l) => {
+    const rowGap = height / (jobs.length + 1);
+    jobs.forEach((i, r) => {
+      positions[i] = { x: 60 + l * colGap + NODE_W / 2, y: rowGap * (r + 1) };
+    });
+  });
+
+  canvas.innerHTML = "";
+  // edges
+  deps.forEach((ds, i) => {
+    ds.forEach(d => {
+      const p = document.createElementNS(NS, "path");
+      const a = positions[d], b = positions[i];
+      const x1 = a.x + NODE_W / 2, y1 = a.y;
+      const x2 = b.x - NODE_W / 2, y2 = b.y;
+      const mx = (x1 + x2) / 2;
+      p.setAttribute("d", `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+      p.setAttribute("class", "edge");
+      p.dataset.from = d; p.dataset.to = i;
+      canvas.appendChild(p);
+    });
+  });
+  // nodes
+  def.forEach((j, i) => {
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "node");
+    g.dataset.i = i;
+    g.setAttribute("data-state", "pending");
+    const pos = positions[i];
+    const rect = document.createElementNS(NS, "rect");
+    rect.setAttribute("x", pos.x - NODE_W / 2); rect.setAttribute("y", pos.y - NODE_H / 2);
+    rect.setAttribute("width", NODE_W); rect.setAttribute("height", NODE_H);
+    rect.setAttribute("rx", 12);
+    const name = document.createElementNS(NS, "text");
+    name.setAttribute("x", pos.x); name.setAttribute("y", pos.y - 2);
+    name.setAttribute("text-anchor", "middle"); name.textContent = j.name;
+    const sub = document.createElementNS(NS, "text");
+    sub.setAttribute("x", pos.x); sub.setAttribute("y", pos.y + 14);
+    sub.setAttribute("text-anchor", "middle"); sub.setAttribute("class", "sub");
+    sub.textContent = "pending";
+    sub.dataset.role = "sub";
+    g.appendChild(rect); g.appendChild(name); g.appendChild(sub);
+    canvas.appendChild(g);
+  });
+
+  layout = { def, deps, positions, levels };
+  document.getElementById("presetDesc").textContent = PRESETS[preset].desc;
+}
+
+function nodeState(sched, i, t) {
+  const s = sched.status[i];
+  if (s === "skipped" || s === "cached") {
+    return t >= sched.startT[i] && sched.startOrder[i] !== -1 ? s
+         : (sched.startOrder[i] === -1 ? (t >= sched.startT[i] ? s : "pending") : "pending");
+  }
+  if (sched.startOrder[i] === -1) return "pending";
+  if (t < sched.startT[i]) return "pending";
+  if (t < sched.endT[i]) return "running";
+  return s; // success | failed
+}
+
+function paint(sched, t) {
+  const nodes = canvas.querySelectorAll(".node");
+  nodes.forEach(g => {
+    const i = +g.dataset.i;
+    const st = nodeState(sched, i, t);
+    if (g.getAttribute("data-state") !== st) g.setAttribute("data-state", st);
+    const sub = g.querySelector('[data-role="sub"]');
+    if (sub) sub.textContent = st;
+    if (st === "running") g.classList.add("pulse"); else g.classList.remove("pulse");
+  });
+  // hot edges: a dep that is done-success/cached feeding a running child
+  canvas.querySelectorAll(".edge").forEach(e => {
+    const from = +e.dataset.from, to = +e.dataset.to;
+    const fromDone = t >= sched.endT[from] && (sched.status[from] === "success" || sched.status[from] === "cached");
+    const toRunning = nodeState(sched, to, t) === "running";
+    e.classList.toggle("hot", fromDone && toRunning);
+  });
+}
+
+function resetView() {
+  if (anim) { cancelAnimationFrame(anim); anim = null; }
+  build(current);
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("summary").textContent = "Press Run.";
+  document.getElementById("peak").textContent = "0";
+  document.getElementById("runBtn").disabled = false;
+}
+
+const SPEED = 1.0; // 1 sim ms == 1 real ms
+
+function play() {
+  const jobs = +document.getElementById("jobs").value;
+  const failFast = document.getElementById("failFast").checked;
+  document.getElementById("limit").textContent = jobs;
+  build(current);
+  const sched = simulate(layout.def, jobs, failFast);
+  const log = document.getElementById("log");
+  log.innerHTML = "";
+  document.getElementById("runBtn").disabled = true;
+
+  // event list for the log, ordered by time then config index
+  const events = [];
+  layout.def.forEach((j, i) => {
+    if (sched.startOrder[i] !== -1 && (sched.status[i] === "success" || sched.status[i] === "failed")) {
+      events.push({ t: sched.startT[i], i, kind: "running" });
+    }
+    events.push({ t: sched.endT[i], i, kind: sched.status[i] });
+  });
+  events.sort((a, b) => a.t - b.t || a.i - b.i);
+  let ei = 0;
+
+  const start = performance.now();
+  function frame(now) {
+    const t = (now - start) * SPEED;
+    paint(sched, t);
+    while (ei < events.length && events[ei].t <= t) {
+      const e = events[ei++];
+      const name = layout.def[e.i].name;
+      const div = document.createElement("div");
+      div.innerHTML = `<span style="color:var(--muted)">${String(Math.round(e.t)).padStart(4)}ms</span> ${name} <span class="tag ${e.kind}">${e.kind}</span>`;
+      log.appendChild(div); log.scrollTop = log.scrollHeight;
+    }
+    if (t < sched.maxT + 60) {
+      anim = requestAnimationFrame(frame);
+    } else {
+      paint(sched, sched.maxT + 100);
+      finish(sched);
+    }
+  }
+  anim = requestAnimationFrame(frame);
+}
+
+function finish(sched) {
+  const count = k => sched.status.filter(s => s === k).length;
+  document.getElementById("summary").innerHTML =
+    `<span class="num" style="color:var(--success)">${count("success")}</span> success, ` +
+    `<span class="num" style="color:var(--cached)">${count("cached")}</span> cached, ` +
+    `<span class="num" style="color:var(--failed)">${count("failed")}</span> failed, ` +
+    `<span class="num" style="color:var(--skipped)">${count("skipped")}</span> skipped`;
+  document.getElementById("peak").textContent = sched.peak;
+  document.getElementById("runBtn").disabled = false;
+}
+
+// ---- Wiring --------------------------------------------------------------
+document.getElementById("presets").addEventListener("click", e => {
+  const btn = e.target.closest("button.chip");
+  if (!btn) return;
+  document.querySelectorAll("#presets .chip").forEach(c => c.classList.remove("active"));
+  btn.classList.add("active");
+  current = btn.dataset.preset;
+  const jobs = PRESETS[current].jobs;
+  document.getElementById("jobs").value = jobs;
+  document.getElementById("jobsVal").textContent = jobs;
+  document.getElementById("limit").textContent = jobs;
+  resetView();
+});
+
+document.getElementById("jobs").addEventListener("input", e => {
+  document.getElementById("jobsVal").textContent = e.target.value;
+  document.getElementById("limit").textContent = e.target.value;
+});
+document.getElementById("runBtn").addEventListener("click", play);
+document.getElementById("resetBtn").addEventListener("click", resetView);
+
+// theme toggle
+const root = document.documentElement;
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const dark = getComputedStyle(root).getPropertyValue("--bg").trim() === "#000000"
+    || root.dataset.theme === "dark";
+  root.dataset.theme = dark ? "light" : "dark";
+});
+
+resetView();
+</script>
 </body>
 </html>
