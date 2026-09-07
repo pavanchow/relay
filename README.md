@@ -1,3 +1,5 @@
+<img src="docs/logo.svg" alt="Relay logo" width="96">
+
 # Relay
 
 A from-scratch CI/CD engine you can actually read. The gap it fills: most CI
