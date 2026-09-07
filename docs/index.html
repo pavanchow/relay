@@ -3,8 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relay - a readable CI/CD engine</title>
+<title>Relay: a readable CI/CD engine with a pure, deterministic DAG scheduler</title>
+<meta name="description" content="Relay by Pavan Nallamothu: a from-scratch CI/CD engine in pure Rust whose scheduler is a pure, deterministic DAG executor. It resolves dependency order, real parallelism up to N, failure propagation, and upstream-aware content-hash caching, all unit-testable without running a single real process.">
+<meta name="author" content="Pavan Nallamothu (pavanchow)">
+<link rel="canonical" href="https://pavanchow.github.io/relay/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="author" href="https://github.com/pavanchow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Relay: a readable CI/CD engine with a pure, deterministic DAG scheduler">
+<meta property="og:description" content="A from-scratch CI/CD engine in pure Rust. Its scheduler is a pure, deterministic DAG executor: dependency order, parallelism up to N, failure propagation, content-hash caching. By Pavan Nallamothu.">
+<meta property="og:url" content="https://pavanchow.github.io/relay/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Relay: a readable CI/CD engine with a pure, deterministic DAG scheduler">
+<meta name="twitter:description" content="Watch a job graph schedule itself: dependency order, parallelism, skips, and cache hits, resolved by a pure deterministic scheduler.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Relay","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS","description":"Relay is a from-scratch CI/CD engine in pure Rust whose scheduler is a pure, deterministic DAG executor over an abstract Executor trait. It resolves dependency order, real parallelism up to N, failure propagation, and upstream-aware content-hash caching, all unit-testable without running a real process.","url":"https://pavanchow.github.io/relay/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/relay","license":"https://opensource.org/licenses/MIT"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+</script>
 <style>
   :root {
     --bg: #f5f5f7;
@@ -23,6 +40,7 @@
     --cached: #af52de;
     --shadow: 0 2px 14px rgba(0,0,0,0.06);
     --radius: 16px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, "SF Mono", monospace;
   }
   /* base body first, dark override after so text is never light-on-white */
   body {
@@ -68,24 +86,7 @@
     }
   }
 
-  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px 80px; }
-  header.hero { text-align: center; padding: 72px 22px 40px; }
-  .hero h1 { font-size: 56px; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 700; }
-  .hero p.lede { font-size: 22px; color: var(--muted); max-width: 640px; margin: 0 auto; }
-  .hero .links { margin-top: 22px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-  a.btn {
-    text-decoration: none; color: var(--accent); font-size: 17px;
-    padding: 8px 16px; border-radius: 980px; border: 1px solid var(--line);
-    background: var(--panel);
-  }
-  a.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-  .theme-toggle {
-    position: fixed; top: 16px; right: 16px; z-index: 10;
-    border: 1px solid var(--line); background: var(--panel); color: var(--fg);
-    border-radius: 980px; padding: 7px 14px; font-size: 14px; cursor: pointer;
-  }
-
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px; }
   section { margin-top: 30px; }
   .card {
     background: var(--panel); border: 1px solid var(--line);
@@ -149,8 +150,8 @@
   .desc { font-size: 15px; color: var(--muted); margin-top: 12px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--accent-weak); padding: 1px 5px; border-radius: 5px; }
-  footer { text-align: center; color: var(--muted); font-size: 14px; margin-top: 50px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--accent-weak); padding: 1px 5px; border-radius: 5px; }
+  footer { text-align: center; color: var(--muted); font-size: 14px; }
 
   /* SVG node styling driven by data-state */
   .node rect { transition: fill 0.25s ease, stroke 0.25s ease; }
@@ -167,24 +168,92 @@
   .edge.hot { stroke: var(--running); }
   .pulse { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+  /* ===== cocoon-grade shell ===== */
+  html { scroll-behavior: smooth; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  nav { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.82); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--line); }
+  :root[data-theme="dark"] nav { background: rgba(0,0,0,.72); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) nav { background: rgba(0,0,0,.72); } }
+  nav .row { display: flex; justify-content: space-between; align-items: center; height: 56px; max-width: 1060px; margin: 0 auto; padding: 0 22px; }
+  nav .brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 650; letter-spacing: -.01em; color: var(--fg); }
+  nav .brand .gem { width: 16px; height: 16px; border-radius: 50% 50% 50% 50%/60% 60% 40% 40%; background: linear-gradient(135deg,#5ea9ff,#0071e3); }
+  nav .links { display: flex; gap: 20px; align-items: center; }
+  nav .links a { color: var(--fg); font-size: 14.5px; text-decoration: none; }
+  nav .links a:hover { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) { nav .links a:not(.gh) { display: none; } }
+
+  .hero { text-align: center; padding: 80px 22px 26px; }
+  .hero img { display: block; margin: 0 auto 18px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin: 0; }
+  .hero h1 { font-size: clamp(40px, 7vw, 64px); line-height: 1.05; letter-spacing: -.035em; font-weight: 700; margin: 16px 0 0; text-wrap: balance; }
+  .hero p.sub { max-width: 680px; margin: 22px auto 0; font-size: clamp(17px, 2.1vw, 21px); color: var(--muted); }
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+  .btn { display: inline-block; padding: 12px 26px; border-radius: 999px; font-size: 15px; font-weight: 600; border: 1px solid var(--fg); color: var(--fg); text-decoration: none; }
+  .btn:hover { opacity: .72; text-decoration: none; }
+  .btn.primary { background: var(--fg); color: var(--panel); border-color: var(--fg); }
+
+  .howto { max-width: 680px; margin: 6px auto 4px; border: 1px solid var(--line); border-radius: 14px; padding: 2px 18px; background: var(--panel-2); }
+  .howto > summary { cursor: pointer; font-weight: 600; padding: 14px 0; list-style: none; }
+  .howto > summary::-webkit-details-marker { display: none; }
+  .howto > summary::before { content: "\25B8"; display: inline-block; margin-right: 8px; color: var(--accent); transition: transform .15s; }
+  .howto[open] > summary::before { transform: rotate(90deg); }
+  .howto .desc { margin: 4px 0 14px; }
+
+  .theme-toggle {
+    position: static; border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+    border-radius: 980px; padding: 6px 13px; font-size: 13px; cursor: pointer;
+  }
+
+  section.narr { border-top: 1px solid var(--line); padding: 70px 0; margin-top: 60px; }
+  section.narr h2 { font-size: clamp(26px, 4.2vw, 36px); line-height: 1.14; letter-spacing: -.025em; font-weight: 660; text-align: center; max-width: 760px; margin: 0 auto; }
+  section.narr .lead { max-width: 660px; margin: 16px auto 0; text-align: center; color: var(--muted); font-size: 16px; }
+  pre.term { background: #15161c; color: #ececf4; border-radius: 14px; padding: 20px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.6; overflow-x: auto; max-width: 760px; margin: 28px auto 0; }
+  pre.term .cm { color: #8a8d9a; }
+  pre.term .g { color: #7fd6a0; }
+  pre.term .r { color: #ff8a80; }
+  footer.site { padding: 60px 22px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); margin-top: 60px; }
+  footer.site .name { color: var(--fg); font-weight: 600; }
+  footer.site p + p { margin-top: 10px; }
+  @media (max-width: 640px) { .hero { padding: 56px 22px 22px; } section.narr { padding: 54px 0; } }
 </style>
 </head>
 <body>
-<button class="theme-toggle" id="themeToggle">Theme</button>
+<noscript><div class="wrap" style="padding:40px 22px;color:#6e6e73">Relay is a from-scratch CI/CD engine in pure Rust by Pavan Nallamothu. Its scheduler is a pure, deterministic DAG executor over an abstract Executor trait: it resolves dependency order, real parallelism up to N, failure propagation, and upstream-aware content-hash caching, all unit-testable without running a real process. Source: <a href="https://github.com/pavanchow/relay">github.com/pavanchow/relay</a>.</div></noscript>
 
-<header class="hero">
-  <img src="logo.svg" alt="Relay logo" width="72" height="72" style="display:block;margin:0 auto 18px">
-  <h1>Relay</h1>
-  <p class="lede">A readable CI/CD engine whose scheduler is a pure, deterministic DAG executor you can unit-test without running anything.</p>
+<nav><div class="row">
+  <div class="brand"><span class="gem"></span>Relay</div>
   <div class="links">
-    <a class="btn primary" href="#playground">Try the visualizer</a>
+    <a href="#sim">Visualizer</a>
+    <a href="#proof">Proof</a>
+    <a href="#use">Use it</a>
+    <a class="gh" href="https://github.com/pavanchow/relay">GitHub</a>
+    <button class="theme-toggle" id="themeToggle">Theme</button>
+  </div>
+</div></nav>
+
+<div class="hero">
+  <img src="logo.svg" alt="Relay logo" width="72" height="72">
+  <p class="eyebrow">Rust &middot; deterministic DAG scheduler</p>
+  <h1>See a pipeline<br>schedule itself.</h1>
+  <p class="sub">Relay is a from-scratch CI/CD engine whose scheduler is a pure, deterministic DAG executor you can unit-test without running anything. Give it a pipeline and it decides what runs, in what order, what runs in parallel, what gets skipped when a job fails, and what is served straight from a content-hash cache. Pick a preset below and press Run to watch the same rules resolve a job graph, live.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="#sim">Run the visualizer</a>
     <a class="btn" href="https://github.com/pavanchow/relay">View on GitHub</a>
   </div>
-</header>
+</div>
+
+<details class="howto">
+  <summary>How to use this playground</summary>
+  <p class="desc">Pick a <b>preset</b> to load a job graph: a diamond DAG, a failure that skips a subtree, a wide fan-out, or a cache hit. The <b>jobs</b> slider sets the concurrency limit (how many jobs may run at once), and <b>fail-fast</b> stops scheduling new work after the first failure.</p>
+  <p class="desc">Press <b>Run</b> and watch each node move through pending, running, and then success, failed, skipped, or cached, exactly as the scheduler resolves the graph. The event log and summary show the order and the peak concurrency actually observed against the limit. <b>Reset</b> clears the run.</p>
+</details>
 
 <div class="wrap">
 
-  <section id="playground">
+  <section id="sim">
     <div class="card">
       <h2>Live pipeline visualizer</h2>
       <p class="sub">This is the Rust scheduler ported to JavaScript with a simulated executor. Pick a preset, set the concurrency limit, and press Run. Watch jobs go pending, running, then success, failed, skipped, or cached, exactly as the engine resolves them.</p>
@@ -234,33 +303,41 @@
     </div>
   </section>
 
-  <section>
-    <details class="card">
-      <summary style="cursor:pointer;font-size:1.4em;font-weight:600">How to use this playground</summary>
-      <div style="margin-top:12px">
-        <p class="desc">Pick a <b>preset</b> to load a job graph: a diamond DAG, a failure that skips a subtree, a wide fan-out, or a cache hit. The <b>jobs</b> slider sets the concurrency limit (how many jobs may run at once), and <b>fail-fast</b> stops scheduling new work after the first failure.</p>
-        <p class="desc" style="margin-top:10px">Press <b>Run</b> and watch each node move through pending, running, and then success, failed, skipped, or cached, exactly as the scheduler resolves the graph. The event log and summary show the order and the peak concurrency actually observed against the limit. <b>Reset</b> clears the run.</p>
-      </div>
-    </details>
-  </section>
-
-  <section>
-    <div class="grid2">
-      <div class="card">
-        <h2>The point</h2>
-        <p class="desc">The core is one function: <code>run(pipeline, executor, limits) -&gt; Report</code>. The scheduler never spawns a process or a thread. It drives an <code>Executor</code> trait in virtual time. Swap in a mock executor and every rule is testable with no real work; swap in the shell executor and the same scheduler runs real commands.</p>
-      </div>
-      <div class="card">
-        <h2>What it guarantees</h2>
-        <p class="desc">Dependency order, real parallelism up to N, failure propagation that skips a failed job's transitive dependents, content-hash caching that skips unchanged work, and full determinism with config-order tie-breaks. It pairs with Metronome, a from-scratch scheduler.</p>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    Relay by Pavan Nallamothu. Zero dependencies, pure Rust std. MIT licensed.
-  </footer>
 </div>
+
+<section id="proof" class="narr"><div class="wrap">
+  <h2>It schedules by rule, not by luck</h2>
+  <p class="lead">The core is one function, <code>schedule::run(&amp;pipeline, &amp;mut executor, limits) -&gt; Report</code>. The scheduler never spawns a process or a thread. It drives an <code>Executor</code> trait in virtual time, so a <code>MockExecutor</code> that records what ran concurrently lets every rule be asserted deterministically. Swap in the <code>ShellExecutor</code> and the same scheduler runs real commands.</p>
+  <pre class="term"><span class="cm">$ relay run examples/failure.relay</span>
+  [ 0] setup                <span class="g">ok</span>       success
+  [ 1] unit                 <span class="r">xx</span>       failed
+  [ 2] docs                 <span class="g">ok</span>       success
+       package              --       skipped
+       deploy               --       skipped
+summary: 2 success, 0 cached, 1 failed, 2 skipped</pre>
+  <p class="lead" style="margin-top:26px">A failed job marks its transitive dependents skipped and they never run, while independent branches keep going. Parallelism is real and bounded: the mock proves the peak concurrency is exactly the limit and never more. Cache keys are a hand-rolled FNV-1a digest of a job's config plus its declared inputs, folded together with every upstream key, so a change in a non-cached upstream busts the downstream key too. Same pipeline, same result and same order, every run, with ties broken by config order.</p>
+</div></section>
+
+<section id="use" class="narr"><div class="wrap">
+  <h2>Use it</h2>
+  <pre class="term"><span class="cm"># the whole test suite runs with no real processes, over the mock executor</span>
+cargo test
+cargo clippy --all-targets -- -D warnings
+
+<span class="cm"># plan the DAG and wave order, run nothing</span>
+relay plan  examples/diamond.relay --jobs 2
+
+<span class="cm"># run a pipeline: print each status and a summary</span>
+relay run   examples/failure.relay
+
+<span class="cm"># print just the dependency graph</span>
+relay graph examples/diamond.relay</pre>
+</div></section>
+
+<footer class="site">
+  <p>Relay is MIT licensed. Zero dependencies, pure Rust std. Source, tests, and design notes are on <a href="https://github.com/pavanchow/relay">GitHub</a>.</p>
+  <p>By <span class="name">Pavan Nallamothu</span>.</p>
+</footer>
 
 <script>
 "use strict";
