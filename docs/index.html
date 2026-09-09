@@ -3,25 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relay: a readable CI/CD engine with a pure, deterministic DAG scheduler</title>
-<meta name="description" content="Relay by Pavan Nallamothu: a from-scratch CI/CD engine in pure Rust whose scheduler is a pure, deterministic DAG executor. It resolves dependency order, real parallelism up to N, failure propagation, and upstream-aware content-hash caching, all unit-testable without running a single real process.">
-<meta name="author" content="Pavan Nallamothu (pavanchow)">
-<meta name="keywords" content="CI/CD engine, DAG scheduler, deterministic scheduler, build pipeline, job graph, dependency order, parallelism, content-hash cache, FNV-1a, fail-fast, Rust, from-scratch, unit-testable scheduler, Pavan Nallamothu, pavanchow">
+<title>Relay: a CI/CD engine and DAG scheduler in Rust | Pavan Nallamothu</title>
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="description" content="Relay: a from-scratch CI/CD engine in Rust with a pure, deterministic DAG scheduler for dependency order, parallelism, and caching. By Pavan Nallamothu.">
+<meta name="keywords" content="CI/CD engine, DAG scheduler, deterministic scheduler, build pipeline, job graph, dependency order, task parallelism, content-hash cache, build caching, fail-fast, CI/CD in Rust, build your own CI, job scheduler, Relay, Pavan Nallamothu, pavanchow">
+<meta name="author" content="Pavan Nallamothu">
 <link rel="canonical" href="https://pavanchow.github.io/relay/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="author" href="https://github.com/pavanchow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Relay: a readable CI/CD engine with a pure, deterministic DAG scheduler">
+<meta property="og:site_name" content="Pavan Nallamothu">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Relay: a CI/CD engine and DAG scheduler in Rust">
 <meta property="og:description" content="A from-scratch CI/CD engine in pure Rust. Its scheduler is a pure, deterministic DAG executor: dependency order, parallelism up to N, failure propagation, content-hash caching. By Pavan Nallamothu.">
 <meta property="og:url" content="https://pavanchow.github.io/relay/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Relay: a readable CI/CD engine with a pure, deterministic DAG scheduler">
+<meta property="og:image" content="https://pavanchow.github.io/relay/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Relay by Pavan Nallamothu">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Relay: a CI/CD engine and DAG scheduler in Rust">
 <meta name="twitter:description" content="Watch a job graph schedule itself: dependency order, parallelism, skips, and cache hits, resolved by a pure deterministic scheduler.">
+<meta name="twitter:image" content="https://pavanchow.github.io/relay/og-image.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Relay","applicationCategory":"DeveloperApplication","softwareVersion":"0.1.0","operatingSystem":"Linux, macOS","description":"Relay is a from-scratch CI/CD engine in pure Rust whose scheduler is a pure, deterministic DAG executor over an abstract Executor trait. It resolves dependency order, real parallelism up to N, failure propagation, and upstream-aware content-hash caching, all unit-testable without running a real process.","url":"https://pavanchow.github.io/relay/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/relay","license":"https://opensource.org/licenses/MIT"}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://pavanchow.github.io/relay/#website","name":"Relay by Pavan Nallamothu","url":"https://pavanchow.github.io/relay/","author":{"@id":"https://github.com/pavanchow#person"}},{"@type":"Person","@id":"https://github.com/pavanchow#person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","jobTitle":"Software Engineer and Security Researcher","knowsAbout":["Rust","systems programming","compilers","distributed systems","data structures","algorithms","security research"],"sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]},{"@type":"SoftwareApplication","@id":"https://pavanchow.github.io/relay/#software","name":"Relay","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","description":"Relay is a from-scratch CI/CD engine in pure Rust whose scheduler is a pure, deterministic DAG executor: dependency order, real parallelism up to N, failure propagation, and upstream-aware content-hash caching.","url":"https://pavanchow.github.io/relay/","image":"https://pavanchow.github.io/relay/og-image.png","softwareVersion":"0.1.0","programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/relay","license":"https://opensource.org/licenses/MIT","datePublished":"2026-08-21","author":{"@id":"https://github.com/pavanchow#person"},"publisher":{"@id":"https://github.com/pavanchow#person"},"keywords":"CI/CD engine, DAG scheduler, deterministic scheduler, build pipeline, job graph, content-hash cache, Rust","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Deterministic DAG scheduling","Dependency-order execution","Bounded parallelism","Failure propagation and fail-fast","Content-hash build caching"]},{"@type":"BreadcrumbList","@id":"https://pavanchow.github.io/relay/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Pavan Nallamothu","item":"https://github.com/pavanchow"},{"@type":"ListItem","position":2,"name":"Relay","item":"https://pavanchow.github.io/relay/"}]},{"@type":"WebPage","@id":"https://pavanchow.github.io/relay/#webpage","url":"https://pavanchow.github.io/relay/","name":"Relay: a CI/CD engine and DAG scheduler in Rust | Pavan Nallamothu","isPartOf":{"@id":"https://pavanchow.github.io/relay/#website"},"about":{"@id":"https://pavanchow.github.io/relay/#software"},"author":{"@id":"https://github.com/pavanchow#person"},"inLanguage":"en"}]}
 </script>
 <style>
   :root {
@@ -387,6 +392,8 @@ relay graph examples/diamond.relay</pre>
 <footer class="site">
   <p>Relay is MIT licensed. Zero dependencies, pure Rust std. Source, tests, and design notes are on <a href="https://github.com/pavanchow/relay">GitHub</a>.</p>
   <p>By <span class="name">Pavan Nallamothu</span>.</p>
+  <p style="margin-top:24px;padding-top:20px;border-top:1px solid var(--line);font-size:14px"><strong>More open-source tools by Pavan Nallamothu:</strong><br>
+  <a href="https://pavanchow.github.io/quartermaster/">Quartermaster, a package manager in Rust</a> · <a href="https://pavanchow.github.io/metronome/">Metronome, a cron scheduler in Rust</a> · <a href="https://pavanchow.github.io/shepherd/">Shepherd, a reconciliation control loop in Rust</a> · <a href="https://pavanchow.github.io/chronos/">Chronos, a CPU scheduler in Rust</a> · <a href="https://pavanchow.github.io/echofront/">Echofront, a layer 7 reverse proxy in Rust</a> · <a href="https://github.com/pavanchow">all projects on GitHub</a></p>
 </footer>
 
 <script>
