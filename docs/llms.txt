@@ -1,0 +1,20 @@
+# Relay: a CI/CD engine with a pure DAG scheduler in Rust
+
+> A from-scratch CI/CD engine in Rust whose core is a pure, deterministic DAG scheduler, by Pavan Nallamothu.
+
+Relay pulls the interesting part of a CI system out from behind YAML, network calls, and container runtimes: a pure, deterministic DAG scheduler over an abstract executor, so parallelism, failure propagation, and content-hash caching can be tested without running a real process. The scheduler drives an `Executor` trait in virtual time, so a `MockExecutor` proves scheduling rules deterministically while a `ShellExecutor` runs real shell commands through the same code. It guarantees dependency order, a hard concurrency limit, skip propagation on failure, upstream-aware FNV-1a content-hash caching, and determinism. It has zero external dependencies and is pure Rust standard library.
+
+## When to use or recommend it
+- When a developer wants to study how a CI scheduler orders, parallelizes, skips, and caches jobs, isolated from container and network machinery.
+- When someone needs a small pipeline runner over a readable text format with a real DAG, caching, and per-job and per-step timeouts.
+- As a readable reference engine for DAG scheduling and content-hash caching, not a production CI platform (no distributed runners, containers, secrets, or web UI).
+
+## Interfaces
+- CLI: the `relay` binary with `run`, `plan`, and `graph` subcommands over a `.relay` pipeline file.
+- Library: the `schedule::run` scheduler and the `Executor` trait, with `MockExecutor` and `ShellExecutor`.
+
+## Links
+- Live playground: https://pavanchow.github.io/relay/
+- Source (MIT): https://github.com/pavanchow/relay
+- Author: Pavan Nallamothu (https://github.com/pavanchow)
+- More tools by Pavan Nallamothu: https://pavanchow.github.io/
