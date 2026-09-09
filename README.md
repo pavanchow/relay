@@ -108,6 +108,8 @@ Example:
 
 ```
 $ relay plan examples/diamond.relay --jobs 2
+plan: examples/diamond.relay (4 jobs, --jobs 2)
+
 dependency graph:
   fetch (root)
   build <- fetch
@@ -122,6 +124,7 @@ execution waves (dependency order, up to 2 at once):
 
 ```
 $ relay run examples/failure.relay
+relay run: examples/failure.relay (--jobs 4)
   [ 0] setup                ok       success
   [ 1] unit                 xx       failed
   [ 2] docs                 ok       success
