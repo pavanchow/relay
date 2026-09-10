@@ -13,6 +13,8 @@ Rust standard library.
 
 **[Live demo](https://pavanchow.github.io/relay/)** · MIT licensed · pure Rust
 
+Built from scratch by [Pavan Nallamothu](https://pavanchow.github.io/) ([LinkedIn](https://www.linkedin.com/in/pavanchow/), [GitHub](https://github.com/pavanchow)).
+
 It pairs with [Metronome](https://github.com/pavanchow), a from-scratch
 scheduler: Metronome decides when work runs over time, Relay decides in what
 order a graph of work runs and what can run at once.
